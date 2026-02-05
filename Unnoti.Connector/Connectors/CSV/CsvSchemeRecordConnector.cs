@@ -21,18 +21,29 @@ namespace Unnoti.Connector.Connectors.CSV
     {
         public override string Name => "CSV → Scheme Record Importer";
         public string ConnectorKey => "CSV_SCHEME_RECORD";
-
         public override string ConnectorType => "CsvSchemeRecordConnector";
 
-        public async Task<ExecutionResult> ExecuteAsync(
+        private LogService _logger;
+
+        public Task<ExecutionResult> ExecuteAsync(
             string connectorConfigPath,
             LogService logger,
             CancellationToken token)
         {
+            _logger = logger;
+            var result = Execute(connectorConfigPath, token);
+            return Task.FromResult(result);
+        }
+
+        private ExecutionResult Execute(
+            string connectorConfigPath,
+            CancellationToken token)
+        {
+            InitializeResult();
 
             var cfg = JsonConvert.DeserializeObject<CsvSchemeRecordConnectionConfig>(
                 File.ReadAllText(connectorConfigPath))
-                ?? throw new InvalidOperationException("Invalid CSV connector config");
+                ?? throw new InvalidOperationException("Invalid Scheme CSV connector config");
 
             var mapper = JsonConvert.DeserializeObject<CsvFieldMapperConfig>(
                 File.ReadAllText(cfg.FieldMapperFilePath))
@@ -40,27 +51,32 @@ namespace Unnoti.Connector.Connectors.CSV
 
             Directory.CreateDirectory(cfg.LogFolderPath);
 
-            var logStamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            var successLog = Path.Combine(cfg.LogFolderPath, $"{logStamp}_success.log");
-            var failureLog = Path.Combine(cfg.LogFolderPath, $"{logStamp}_failure.log");
-
             var importService = new SchemeRecordImportService(cfg.ApiBaseUrl, cfg.ApiKey);
 
             foreach (var file in Directory.GetFiles(cfg.InputFolder, "*.csv"))
             {
-                InitializeResult();
+                _logger.Info($"Processing file: {Path.GetFileName(file)}");
+
                 var lines = File.ReadAllLines(file);
-                if (lines.Length < 2) continue;
+                if (lines.Length < 2)
+                    continue;
 
                 var headers = lines[0].Split(',').Select(h => h.Trim()).ToList();
                 var batch = new List<SchemeRecordPayload>();
 
+                var logFilename =
+                    Path.GetFileNameWithoutExtension(file) + "_" +
+                    DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff") +
+                    "_ImportLog.csv";
+
                 for (int row = 1; row < lines.Length; row++)
                 {
-                    var cols = lines[row].Split(',');
+                    token.ThrowIfCancellationRequested();
 
-                    await ExecuteRecordAsync(async () =>
+                    try
                     {
+                        var cols = lines[row].Split(',');
+
                         var payload = BuildPayloadFromCsv(
                             headers,
                             cols,
@@ -72,50 +88,83 @@ namespace Unnoti.Connector.Connectors.CSV
 
                         if (batch.Count >= cfg.BatchSize)
                         {
-                            await SendBatch(importService, batch, token);
+                            SendBatch(
+                                importService,
+                                batch,
+                                cfg.LogFolderPath,
+                                logFilename,
+                                row + 1 - batch.Count,
+                                token);
+
                             batch.Clear();
                         }
-
-                        File.AppendAllText(
-                            successLog,
-                            $"Row {row + 1} SUCCESS{Environment.NewLine}");
-
-                    }, $"Row-{row + 1}");
-
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error($"Row {row + 1}: {ex.Message}");
+                        LogError($"Row {row + 1}: {ex.Message}");
+                    }
                 }
 
                 if (batch.Any())
                 {
-                    await SendBatch(importService, batch, token);
+                    SendBatch(
+                        importService,
+                        batch,
+                        cfg.LogFolderPath,
+                        logFilename,
+                        lines.Length - batch.Count,
+                        token);
+
                     batch.Clear();
                 }
 
-                File.Move(
-                    file,
-                    Path.Combine(cfg.ArchiveFolder, Path.GetFileName(file))
-                    );
+                var target = Path.Combine(cfg.ArchiveFolder, Path.GetFileName(file));
+                if (File.Exists(target))
+                    File.Delete(target);
+
+                // File.Move(file, target);
             }
 
             return Complete();
         }
 
-        private async Task SendBatch(
-       SchemeRecordImportService service,
-       List<SchemeRecordPayload> batch,
-       CancellationToken token)
+        // ===================== SEND BATCH (SYNC) =====================
+
+        private void SendBatch(
+            SchemeRecordImportService service,
+            List<SchemeRecordPayload> batch,
+            string logsFolder,
+            string logFileName,
+            int startingRowNumber,
+            CancellationToken token)
         {
+            var csvLogger = new ImportCsvLogger(logsFolder, logFileName);
+            int rowNumber = startingRowNumber;
+
             foreach (var payload in batch)
             {
                 token.ThrowIfCancellationRequested();
-                await service.SendAsync(payload, token)
-                             .ConfigureAwait(false);
+
+                var uniqueValue = payload.UniqueData?
+                    .FirstOrDefault()?.GoldenRecordUniqueId ?? "UNKNOWN";
+
+                var result = service.Send(payload);
+
+                _logger.Info($"Row {rowNumber} → {result.HttpStatus}");
+
+                csvLogger.WriteRow(
+                    rowNumber,
+                    uniqueValue,
+                    result.IsSuccess ? "SUCCESS" : "FAILURE",
+                    result.HttpStatus,
+                    result.ResponseText);
+
+                rowNumber++;
             }
         }
 
-        protected override void LogError(string message)
-        {
-            File.AppendAllText("csv-errors.log", message + Environment.NewLine);
-        }
+        // ===================== PAYLOAD BUILDER =====================
 
         private SchemeRecordPayload BuildPayloadFromCsv(
             List<string> headers,
@@ -124,15 +173,22 @@ namespace Unnoti.Connector.Connectors.CSV
             CsvSchemeRecordConnectionConfig cfg,
             int rowNumber)
         {
-            var payload = new SchemeRecordPayload() { FieldValues = new List<FieldValue>(), UniqueData = new List<UniqueData>() };
+            var payload = new SchemeRecordPayload
+            {
+                WorkflowKey = cfg.WorkflowKey, // ⭐ ADDON PARAM FROM CONFIG
+                FieldValues = new List<FieldValue>(),
+                UniqueData = new List<UniqueData>()
+            };
 
             foreach (var map in mapper.Field_Mappings)
             {
                 var idx = headers.IndexOf(map.Csv_Header);
-                if (idx == -1) continue;
+                if (idx == -1)
+                    continue;
 
                 var raw = values.Length > idx ? values[idx]?.Trim() : null;
-                if (string.IsNullOrWhiteSpace(raw)) continue;
+                if (string.IsNullOrWhiteSpace(raw))
+                    continue;
 
                 try
                 {
@@ -141,7 +197,7 @@ namespace Unnoti.Connector.Connectors.CSV
                         payload.UniqueData.Add(new UniqueData
                         {
                             GoldenRecordUniqueId = raw,
-                            UniqueIdType = cfg.UniqueIdType
+                            UniqueIdType = map.Grs_Field_Key
                         });
                         continue;
                     }
@@ -184,30 +240,29 @@ namespace Unnoti.Connector.Connectors.CSV
             return payload;
         }
 
-        public IConnector GetConfigType()
+        protected override void LogError(string message)
         {
-            throw new NotImplementedException();
+            File.AppendAllText("scheme-csv-errors.log", message + Environment.NewLine);
         }
 
-        public string GetConnectorConfigurations()
-        {
-            throw new NotImplementedException();
-        }
+        // ===================== CONFIG =====================
 
-        public IReadOnlyList<ConfigFieldDefinition> GetConfigSchema()
-        {
-            return new[]
-  {
-            new ConfigFieldDefinition
+        public IReadOnlyList<ConfigFieldDefinition> GetConfigSchema() =>
+            new[]
             {
-                Key = "ConnectionConfig",
-                Label = "CSV To Scheme Record Import Connector Configuration Path",
-                FieldType = ConfigFieldType.ConnectionConfigJson,
-                IsRequired = true,
-                ModelType = typeof(CsvSchemeRecordConnectionConfig),
-                DefaultValue="E:\\Work\\Samples\\UnnotiCommandTool\\Configs\\CSV\\GirlsEducationScheme\\config\\config.json"
-            }
-          };
-        }
+                new ConfigFieldDefinition
+                {
+                    Key = "ConnectionConfig",
+                    Label = "CSV → Scheme Record Import Connector Configuration Path",
+                    FieldType = ConfigFieldType.ConnectionConfigJson,
+                    IsRequired = true,
+                    ModelType = typeof(CsvSchemeRecordConnectionConfig),
+                    DefaultValue =
+                        "E:\\Work\\Samples\\UnnotiCommandTool\\Configs\\CSV\\GirlsEducationScheme\\config\\config.json"
+                }
+            };
+
+        public IConnector GetConfigType() => throw new NotImplementedException();
+        public string GetConnectorConfigurations() => throw new NotImplementedException();
     }
 }

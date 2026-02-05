@@ -14,6 +14,7 @@ namespace Unnoti.Core.DTOs
         public string BaseApiUrl { get; set; }
         public List<UniqueData> UniqueData { get; set; }
         public List<FieldValue> FieldValues { get; set; }
+        public string WorkflowKey { get; set; }
     }
     public class UniqueData
     {
