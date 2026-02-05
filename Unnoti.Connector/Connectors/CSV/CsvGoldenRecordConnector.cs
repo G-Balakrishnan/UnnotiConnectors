@@ -73,11 +73,10 @@ namespace Unnoti.Connector.Connectors.CSV
 
                     try
                     {
-                        var cols = lines[row].Split(',');
+                        var rowDict = ParseCsvRowToDictionary(lines[0], lines[row]);
 
-                        var payload = BuildPayloadFromCsv(
-                            headers,
-                            cols,
+                        var payload = BuildPayloadFromDictionary(
+                            rowDict,
                             mapper,
                             cfg,
                             row + 1);
@@ -165,22 +164,25 @@ namespace Unnoti.Connector.Connectors.CSV
             File.AppendAllText("csv-errors.log", message + Environment.NewLine);
         }
 
-        private GoldenRecordPayload BuildPayloadFromCsv(
-            List<string> headers,
-            string[] values,
-            CsvFieldMapperConfig mapper,
-            CsvGoldenRecordConnectionConfig cfg,
-            int rowNumber)
+        private GoldenRecordPayload BuildPayloadFromDictionary(
+      Dictionary<string, string> rowData,
+      CsvFieldMapperConfig mapper,
+      CsvGoldenRecordConnectionConfig cfg,
+      int rowNumber)
         {
-            var payload = new GoldenRecordPayload() { FieldValues = new List<FieldValue>(), UniqueData = new List<UniqueData>() };
+            var payload = new GoldenRecordPayload
+            {
+                FieldValues = new List<FieldValue>(),
+                UniqueData = new List<UniqueData>()
+            };
 
             foreach (var map in mapper.Field_Mappings)
             {
-                var idx = headers.IndexOf(map.Csv_Header);
-                if (idx == -1) continue;
+                if (!rowData.TryGetValue(map.Csv_Header, out var raw))
+                    continue;
 
-                var raw = values.Length > idx ? values[idx]?.Trim() : null;
-                if (string.IsNullOrWhiteSpace(raw)) continue;
+                if (string.IsNullOrWhiteSpace(raw))
+                    continue;
 
                 try
                 {
@@ -231,6 +233,55 @@ namespace Unnoti.Connector.Connectors.CSV
 
             return payload;
         }
+
+
+        private Dictionary<string, string> ParseCsvRowToDictionary(
+    string headerLine,
+    string rowLine)
+        {
+            var headers = SplitCsvLine(headerLine);
+            var values = SplitCsvLine(rowLine);
+
+            var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < headers.Count; i++)
+            {
+                var value = i < values.Count ? values[i] : null;
+                dict[headers[i]] = value?.Trim();
+            }
+
+            return dict;
+        }
+
+       
+        private List<string> SplitCsvLine(string line)
+        {
+            var result = new List<string>();
+            var current = "";
+            bool inQuotes = false;
+
+            foreach (char c in line)
+            {
+                if (c == '"')
+                {
+                    inQuotes = !inQuotes;
+                    continue;
+                }
+
+                if (c == ',' && !inQuotes)
+                {
+                    result.Add(current);
+                    current = "";
+                    continue;
+                }
+
+                current += c;
+            }
+
+            result.Add(current);
+            return result;
+        }
+
 
         public IConnector GetConfigType()
         {
