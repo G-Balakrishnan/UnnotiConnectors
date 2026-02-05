@@ -1,0 +1,76 @@
+{
+
+  "field_mappings": [
+     {
+      "csv_header": "rc_mem",
+      "grs_field_key": "rc_mem",
+      "data_type": "string",
+      "isUnique":true
+    },
+    {
+      "csv_header": "full_name",
+      "grs_field_key": "full_name",
+      "data_type": "string"
+    },
+    {
+      "csv_header": "father_husband_name",
+      "grs_field_key": "father_name",
+      "data_type": "string"
+    },
+    {
+      "csv_header": "mother_name",
+      "grs_field_key": "mother_name",
+      "data_type": "string"
+    },
+    {
+      "csv_header": "gender",
+      "grs_field_key": "gender",
+      "data_type": "string"
+    },
+    {
+      "csv_header": "date_of_birth",
+      "grs_field_key": "dob",
+      "data_type": "date"
+    },
+    {
+      "csv_header": "caste",
+      "grs_field_key": "caste",
+      "data_type": "string"
+    },
+    {
+      "csv_header": "ben_mobile",
+      "grs_field_key": "mobile_number",
+      "data_type": "string"
+    },
+    {
+      "csv_header": "ben_email",
+      "grs_field_key": "email",
+      "data_type": "string"
+    },
+    {
+      "csv_header": "district",
+      "grs_field_key": "district",
+      "data_type": "string"
+    },
+    {
+      "csv_header": "subdivision",
+      "grs_field_key": "subdivision",
+      "data_type": "string"
+    },
+    {
+      "csv_header": "bank_account_number",
+      "grs_field_key": "bank_account_no",
+      "data_type": "string"
+    },
+    {
+      "csv_header": "bank_name",
+      "grs_field_key": "bank_name",
+      "data_type": "string"
+    },
+    {
+      "csv_header": "ifsc_code",
+      "grs_field_key": "ifsc_code",
+      "data_type": "string"
+    }
+  ]
+}
