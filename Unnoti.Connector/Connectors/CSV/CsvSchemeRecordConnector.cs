@@ -12,6 +12,7 @@ using Unnoti.Core.Config;
 using Unnoti.Core.DTOs;
 using Unnoti.Core.Execution;
 using Unnoti.Core.IContracts;
+using Unnoti.Core.Logging;
 using Unnoti.Core.Services;
 
 namespace Unnoti.Connector.Connectors.CSV
@@ -25,6 +26,7 @@ namespace Unnoti.Connector.Connectors.CSV
 
         public async Task<ExecutionResult> ExecuteAsync(
             string connectorConfigPath,
+            LogService logger,
             CancellationToken token)
         {
 
@@ -98,12 +100,16 @@ namespace Unnoti.Connector.Connectors.CSV
         }
 
         private async Task SendBatch(
-            SchemeRecordImportService service,
-            List<SchemeRecordPayload> batch,
-            CancellationToken token)
+       SchemeRecordImportService service,
+       List<SchemeRecordPayload> batch,
+       CancellationToken token)
         {
             foreach (var payload in batch)
-                await service.SendAsync(payload, token);
+            {
+                token.ThrowIfCancellationRequested();
+                await service.SendAsync(payload, token)
+                             .ConfigureAwait(false);
+            }
         }
 
         protected override void LogError(string message)

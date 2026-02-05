@@ -125,7 +125,7 @@ namespace Unnoti.Connector.Base
     {
         string Name { get; }
         string ConnectorKey { get; }
-        Task<ExecutionResult> ExecuteAsync(string connectorConfigPath, CancellationToken cancellationToken);
+        Task<ExecutionResult> ExecuteAsync(string connectorConfigPath, Core.Logging.LogService logger, CancellationToken cancellationToken);
         IConnector GetConfigType();
         string GetConnectorConfigurations();
     }

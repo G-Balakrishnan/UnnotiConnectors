@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Unnoti.Connector.Base;
@@ -14,22 +13,34 @@ using Unnoti.Core.Config;
 using Unnoti.Core.DTOs;
 using Unnoti.Core.Execution;
 using Unnoti.Core.IContracts;
+using Unnoti.Core.Logging;
 using Unnoti.Core.Services;
 
 namespace Unnoti.Connector.Connectors.SQL
 {
-    public class SqlGoldenRecordConnector : ConnectorBase, IConnector,IConfigurableConnector
+    public class SqlGoldenRecordConnector : ConnectorBase, IConnector, IConfigurableConnector
     {
         public override string Name => "SQL → Golden Record Importer";
         public string ConnectorKey => "SQL_GOLDEN_RECORD";
-
         public override string ConnectorType => "SqlGoldenRecordConnector";
 
-        public async Task<ExecutionResult> ExecuteAsync(
+        private LogService _logger;
+
+        public Task<ExecutionResult> ExecuteAsync(
+            string connectorConfigPath,
+            LogService logger,
+            CancellationToken token)
+        {
+            _logger = logger;
+            var result = Execute(connectorConfigPath, token);
+            return Task.FromResult(result);
+        }
+
+        private ExecutionResult Execute(
             string connectorConfigPath,
             CancellationToken token)
         {
-     
+            InitializeResult();
 
             var cfg = JsonConvert.DeserializeObject<SqlGoldenRecordConnectionConfig>(
                 File.ReadAllText(connectorConfigPath))
@@ -41,77 +52,110 @@ namespace Unnoti.Connector.Connectors.SQL
 
             Directory.CreateDirectory(cfg.LogFolderPath);
 
-            var logStamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            var successLog = Path.Combine(cfg.LogFolderPath, $"{logStamp}_success.log");
-            var failureLog = Path.Combine(cfg.LogFolderPath, $"{logStamp}_failure.log");
-
             var importService = new GoldenRecordImportService(cfg.ApiBaseUrl, cfg.ApiKey);
+
+            var logFilename =
+                "SQL_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff") + "_ImportLog.csv";
 
             using (var con = new SqlConnection(cfg.ConnectionString))
             {
-                await con.OpenAsync(token);
+                con.Open();
 
                 using (var cmd = new SqlCommand(cfg.Query, con))
+                using (var reader = cmd.ExecuteReader())
                 {
-                    using (var reader = await cmd.ExecuteReaderAsync(token))
+                    var batch = new List<GoldenRecordPayload>();
+                    int rowNumber = 0;
+
+                    while (reader.Read())
                     {
+                        token.ThrowIfCancellationRequested();
+                        rowNumber++;
 
-                        var batch = new List<GoldenRecordPayload>();
-                        var rowNumber = 0;
-
-                        while (await reader.ReadAsync(token))
+                        try
                         {
-                            rowNumber++;
+                            var payload = BuildPayloadFromReader(
+                                reader,
+                                mapper,
+                                cfg,
+                                rowNumber);
 
-                            await ExecuteRecordAsync(async () =>
+                            batch.Add(payload);
+
+                            if (batch.Count >= cfg.BatchSize)
                             {
-                                var payload = BuildPayloadFromReader(
-                                    reader,
-                                    mapper,
-                                    cfg,
-                                    rowNumber);
+                                SendBatch(
+                                    importService,
+                                    batch,
+                                    cfg.LogFolderPath,
+                                    logFilename,
+                                    rowNumber - batch.Count + 1,
+                                    token);
 
-                                batch.Add(payload);
-
-                                if (batch.Count >= cfg.BatchSize)
-                                {
-                                    await SendBatch(importService, batch, token);
-                                    batch.Clear();
-                                }
-
-                                File.AppendAllText(
-                                    successLog,
-                                    $"Row {rowNumber} SUCCESS{Environment.NewLine}");
-
-                            }, $"Row-{rowNumber}");
+                                batch.Clear();
+                            }
                         }
-                        if (batch.Any())
+                        catch (Exception ex)
                         {
-                            await SendBatch(importService, batch, token);
-                            batch.Clear();
+                            _logger.Error($"Row {rowNumber}: {ex.Message}");
+                            LogError($"Row {rowNumber}: {ex.Message}");
                         }
                     }
+
+                    if (batch.Any())
+                    {
+                        SendBatch(
+                            importService,
+                            batch,
+                            cfg.LogFolderPath,
+                            logFilename,
+                            rowNumber - batch.Count + 1,
+                            token);
+
+                        batch.Clear();
+                    }
                 }
-               
             }
-        
 
             return Complete();
         }
 
-        private async Task SendBatch(
+        // ================= BATCH SEND (SYNC) =================
+
+        private void SendBatch(
             GoldenRecordImportService service,
             List<GoldenRecordPayload> batch,
+            string logsFolder,
+            string logFileName,
+            int startingRowNumber,
             CancellationToken token)
         {
+            var csvLogger = new ImportCsvLogger(logsFolder, logFileName);
+            int rowNumber = startingRowNumber;
+
             foreach (var payload in batch)
-                await service.SendAsync(payload, token);
+            {
+                token.ThrowIfCancellationRequested();
+
+                var uniqueValue = payload.UniqueData?
+                    .FirstOrDefault()?.GoldenRecordUniqueId ?? "UNKNOWN";
+
+                var result = service.Send(payload);
+
+                _logger.Info($"Row {rowNumber} → {result.HttpStatus}");
+
+                csvLogger.WriteRow(
+                    rowNumber,
+                    uniqueValue,
+                    result.IsSuccess ? "SUCCESS" : "FAILURE",
+                    result.HttpStatus,
+                    result.ResponseText);
+
+                rowNumber++;
+            }
         }
 
-        protected override void LogError(string message)
-        {
-            File.AppendAllText("sql-errors.log", message + Environment.NewLine);
-        }
+        // ================= PAYLOAD BUILDER =================
 
         private GoldenRecordPayload BuildPayloadFromReader(
             SqlDataReader reader,
@@ -119,7 +163,11 @@ namespace Unnoti.Connector.Connectors.SQL
             SqlGoldenRecordConnectionConfig cfg,
             int rowNumber)
         {
-            var payload = new GoldenRecordPayload();
+            var payload = new GoldenRecordPayload
+            {
+                FieldValues = new List<FieldValue>(),
+                UniqueData = new List<UniqueData>()
+            };
 
             foreach (var map in mapper.Field_Mappings)
             {
@@ -152,19 +200,15 @@ namespace Unnoti.Connector.Connectors.SQL
                         case "string":
                             field.StringValue = raw;
                             break;
-
                         case "number":
                             field.NumericValue = decimal.Parse(raw);
                             break;
-
                         case "date":
                             field.DateValue = DateTime.Parse(raw);
                             break;
-
                         case "bool":
                             field.BoolValue = bool.Parse(raw);
                             break;
-
                         default:
                             throw new Exception($"Unsupported data type {map.Data_Type}");
                     }
@@ -194,29 +238,28 @@ namespace Unnoti.Connector.Connectors.SQL
             return false;
         }
 
+        protected override void LogError(string message)
+        {
+            File.AppendAllText("sql-errors.log", message + Environment.NewLine);
+        }
+
+        // ================= CONFIG =================
+
         public IReadOnlyList<ConfigFieldDefinition> GetConfigSchema() =>
-       new[]
-       {
-            new ConfigFieldDefinition
+            new[]
             {
-                Key = "ConnectionConfig",
-                Label = "SQL Connector to Import for Goldren Record ConfigPath",
-                FieldType = ConfigFieldType.ConnectionConfigJson,
-                IsRequired = true,
-                ModelType = typeof(SqlGoldenRecordConnectionConfig),
-                DefaultValue="E:\\Work\\Samples\\UnnotiCommandTool\\Configs\\SQL\\config\\config.json"
-            }
-       };
+                new ConfigFieldDefinition
+                {
+                    Key = "ConnectionConfig",
+                    Label = "SQL → Golden Record Import Connector Config Path",
+                    FieldType = ConfigFieldType.ConnectionConfigJson,
+                    IsRequired = true,
+                    ModelType = typeof(SqlGoldenRecordConnectionConfig),
+                    DefaultValue = "E:\\Work\\Samples\\UnnotiCommandTool\\Configs\\SQL\\config\\config.json"
+                }
+            };
 
-        public IConnector GetConfigType()
-        {
-            throw new NotImplementedException();
-        }
-
-        public string GetConnectorConfigurations()
-        {
-            throw new NotImplementedException();
-        }
+        public IConnector GetConfigType() => throw new NotImplementedException();
+        public string GetConnectorConfigurations() => throw new NotImplementedException();
     }
 }
-

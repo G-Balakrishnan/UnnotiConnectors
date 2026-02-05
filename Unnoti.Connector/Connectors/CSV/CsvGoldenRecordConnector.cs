@@ -23,12 +23,22 @@ namespace Unnoti.Connector.Connectors.CSV
         public string ConnectorKey => "CSV_GOLDEN_RECORD";
 
         public override string ConnectorType => "CsvGoldenRecordConnector";
+        LogService logger;
 
-        public async Task<ExecutionResult> ExecuteAsync(
-            string connectorConfigPath,
-            CancellationToken token)
+        public Task<ExecutionResult> ExecuteAsync(
+    string connectorConfigPath, LogService logger,
+    CancellationToken token)
         {
+            this.logger = logger;
+            var result = Execute(connectorConfigPath, token);
 
+            return Task.FromResult(result);
+        }
+
+        private ExecutionResult Execute(
+    string connectorConfigPath,
+    CancellationToken token)
+        {
             var cfg = JsonConvert.DeserializeObject<CsvGoldenRecordConnectionConfig>(
                 File.ReadAllText(connectorConfigPath))
                 ?? throw new InvalidOperationException("Invalid CSV connector config");
@@ -39,27 +49,31 @@ namespace Unnoti.Connector.Connectors.CSV
 
             Directory.CreateDirectory(cfg.LogFolderPath);
 
-            var logStamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            var successLog = Path.Combine(cfg.LogFolderPath, $"{logStamp}_success.log");
-            var failureLog = Path.Combine(cfg.LogFolderPath, $"{logStamp}_failure.log");
-
             var importService = new GoldenRecordImportService(cfg.ApiBaseUrl, cfg.ApiKey);
 
             foreach (var file in Directory.GetFiles(cfg.InputFolder, "*.csv"))
             {
                 InitializeResult();
+
                 var lines = File.ReadAllLines(file);
                 if (lines.Length < 2) continue;
 
                 var headers = lines[0].Split(',').Select(h => h.Trim()).ToList();
                 var batch = new List<GoldenRecordPayload>();
-                string logFilename = Path.GetFileNameWithoutExtension(file) + "_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff") + "_ImportLog.csv";
+
+                var logFilename =
+                    Path.GetFileNameWithoutExtension(file) + "_" +
+                    DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff") +
+                    "_ImportLog.csv";
+
                 for (int row = 1; row < lines.Length; row++)
                 {
-                    var cols = lines[row].Split(',');
+                    token.ThrowIfCancellationRequested();
 
-                    await ExecuteRecordAsync(async () =>
+                    try
                     {
+                        var cols = lines[row].Split(',');
+
                         var payload = BuildPayloadFromCsv(
                             headers,
                             cols,
@@ -71,21 +85,33 @@ namespace Unnoti.Connector.Connectors.CSV
 
                         if (batch.Count >= cfg.BatchSize)
                         {
-                            await SendBatch(importService, batch, cfg.LogFolderPath, logFilename, row + 1 - batch.Count, token);
+                            SendBatch(
+                                importService,
+                                batch,
+                                cfg.LogFolderPath,
+                                logFilename,
+                                row + 1 - batch.Count,
+                                token);
+
                             batch.Clear();
                         }
-
-                        File.AppendAllText(
-                            successLog,
-                            $"Row {row + 1} SUCCESS{Environment.NewLine}");
-
-                    }, $"Row-{row + 1}");
-
+                    }
+                    catch (Exception ex)
+                    {
+                        LogError($"Row {row + 1}: {ex.Message}");
+                    }
                 }
 
                 if (batch.Any())
                 {
-                    await SendBatch(importService, batch, cfg.LogFolderPath, logFilename,  batch.Count, token);
+                    SendBatch(
+                        importService,
+                        batch,
+                        cfg.LogFolderPath,
+                        logFilename,
+                        lines.Length - batch.Count,
+                        token);
+
                     batch.Clear();
                 }
 
@@ -93,13 +119,14 @@ namespace Unnoti.Connector.Connectors.CSV
                 if (File.Exists(target))
                     File.Delete(target);
 
-                File.Move(file, target);
+                //File.Move(file, target);
             }
 
             return Complete();
         }
 
-        private async Task SendBatch(
+
+        private void SendBatch(
      GoldenRecordImportService service,
      List<GoldenRecordPayload> batch,
      string logsFolder,
@@ -112,11 +139,13 @@ namespace Unnoti.Connector.Connectors.CSV
 
             foreach (var payload in batch)
             {
+                token.ThrowIfCancellationRequested();
+
                 var uniqueValue = payload.UniqueData?
                     .FirstOrDefault()?.GoldenRecordUniqueId ?? "UNKNOWN";
 
-                var result = await service.SendAsync(payload, token);
-
+                var result = service.Send(payload);
+                logger.Info(result.ResponseText);
                 csvLogger.WriteRow(
                     rowNumber,
                     uniqueValue,
@@ -159,7 +188,7 @@ namespace Unnoti.Connector.Connectors.CSV
                         payload.UniqueData.Add(new UniqueData
                         {
                             GoldenRecordUniqueId = raw,
-                            UniqueIdType = cfg.UniqueIdType
+                            UniqueIdType = map.Grs_Field_Key
                         });
                         continue;
                     }
@@ -227,5 +256,7 @@ namespace Unnoti.Connector.Connectors.CSV
             }
           };
         }
+
+      
     }
 }

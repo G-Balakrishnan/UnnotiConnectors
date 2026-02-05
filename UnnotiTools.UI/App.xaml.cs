@@ -1,11 +1,15 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Documents;
 using Unnoti.Connector.Base;
 using Unnoti.Core.IContracts;
+using Unnoti.Core.Logging;
+using UnnotiTools.UI.Services;
 
 namespace UnnotiTools.UI
 {
@@ -66,7 +70,7 @@ namespace UnnotiTools.UI
 
             var connector = ConnectorFactory.Get(connectorKey);
 
-            await connector.ExecuteAsync(configPath, CancellationToken.None);
+            var response = await connector.ExecuteAsync(configPath,new Unnoti.Core.Logging.LogService(new List<ILogSink>() { }), CancellationToken.None);
         }
 
         static class ConnectorFactory

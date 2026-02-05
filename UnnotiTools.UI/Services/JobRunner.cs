@@ -24,9 +24,10 @@ namespace UnnotiTools.UI.Services
             {
                     var connector = ConnectorRegistry.Create(job.ConnectorType);
 
-                    connector.ExecuteAsync(
-                        job.ConnectorConfig,
-                        CancellationToken.None).Wait();
+                    var response = connector.ExecuteAsync(
+                        job.ConnectorConfig, logger,
+                        CancellationToken.None).Result;
+                logger.Info("Completed");
             }
             catch (UnauthorizedAccessException ex)
             {

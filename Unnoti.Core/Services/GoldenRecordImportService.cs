@@ -25,14 +25,66 @@ namespace Unnoti.Core.Services
                 BaseAddress = new Uri(baseUrl)
             };
         }
-
+        string _baseurl = "";
         public GoldenRecordImportService(string baseUrl,string apiKey)
         {
+            _baseurl = baseUrl.ToLower(); ;
             _client = new HttpClient
             {
                 BaseAddress = new Uri(baseUrl)
             };
         }
+        public ImportResult Send(GoldenRecordPayload payload)
+        {
+            var url = _baseurl+ "/ingest"; // full URL
+
+            try
+            {
+                using (var client = new HttpClient())
+                {
+                    client.DefaultRequestHeaders.Accept.Clear();
+                    client.DefaultRequestHeaders.Accept.Add(
+                        new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+                    var json = JsonConvert.SerializeObject(
+                        payload,
+                        new JsonSerializerSettings
+                        {
+                            NullValueHandling = NullValueHandling.Ignore
+                        });
+
+                    using (var content = new StringContent(json, Encoding.UTF8, "application/json"))
+                    {
+                        var response = client
+                            .PostAsync(url, content)
+                            .GetAwaiter()
+                            .GetResult();   // 🔒 SYNC
+
+                        var responseText = response.Content
+                            .ReadAsStringAsync()
+                            .GetAwaiter()
+                            .GetResult();   // 🔒 SYNC
+
+                        return new ImportResult
+                        {
+                            IsSuccess = response.IsSuccessStatusCode,
+                            HttpStatus = ((int)response.StatusCode).ToString(),
+                            ResponseText = responseText
+                        };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return new ImportResult
+                {
+                    IsSuccess = false,
+                    HttpStatus = "EXCEPTION",
+                    ResponseText = ex.ToString()
+                };
+            }
+        }
+
 
         public async Task<ImportResult> SendAsync(
          GoldenRecordPayload payload,

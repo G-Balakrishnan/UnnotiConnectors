@@ -8,6 +8,7 @@
         Foreground="White"
         WindowStartupLocation="CenterScreen">
 
+    
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="60"/>
@@ -151,11 +152,12 @@
                             Foreground="White"/>
 
                     <Button Content="Run Migration"
-                            Width="140"
-                            Height="36"
-                            Background="#1F6FEB"
-                            Foreground="White"
-                            Command="{Binding RunCommand}"/>
+        Width="140"
+        Height="36"
+        Background="#1F6FEB"
+        Foreground="White"
+        Command="{Binding RunCommand}"
+        IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBoolConverter}}"/>
                 </StackPanel>
 
             </DockPanel>
@@ -183,5 +185,29 @@
             </DockPanel>
         </Border>
 
+        <Grid Grid.RowSpan="3"
+      Grid.ColumnSpan="2"
+      Background="#80000000"
+      Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibilityConverter}}">
+
+            <StackPanel HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="#0F2A44"
+            >
+
+                <TextBlock Text="Running Migration..."
+                   Foreground="White"
+                   FontSize="16"
+                   Margin="0,0,0,12"
+                   HorizontalAlignment="Center"/>
+
+                <ProgressBar Width="220"
+                     Height="8"
+                     IsIndeterminate="True"/>
+            </StackPanel>
+        </Grid>
+
     </Grid>
+            
+            
 </Window>

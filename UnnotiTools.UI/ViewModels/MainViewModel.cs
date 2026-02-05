@@ -19,6 +19,13 @@ namespace UnnotiTools.UI.ViewModels
         public ObservableCollection<ConnectorItemViewModel> Connectors { get; }
         public ObservableCollection<KeyValueItem> ConfigItems { get; }
 
+        private bool _isRunning;
+        public bool IsRunning
+        {
+            get => _isRunning;
+            set { _isRunning = value; OnPropertyChanged(); }
+        }
+
         public ConnectorItemViewModel SelectedConnector
         {
             get => _selectedConnector;
@@ -81,16 +88,34 @@ namespace UnnotiTools.UI.ViewModels
         {
             try
             {
-                var job = new JobConfig
-                {
-                   // JobName = "UI Job",
-                    ConnectorType = SelectedConnector.ConnectorType,
-                    //BaseApiUrl = "https://api-base-url",
-                    //LogFilePath = "ui.log",
-                    ConnectorConfig = ConfigItems.ToDictionary(k => k.Key, v => v.Value).First().Value
-                };
+                IsRunning = true;
 
-                JobRunner.Run(job, AppendLog);
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        var job = new JobConfig
+                        {
+                            ConnectorType = SelectedConnector.ConnectorType,
+                            ConnectorConfig = ConfigItems
+                                .ToDictionary(k => k.Key, v => v.Value)
+                                .First().Value
+                        };
+
+                        JobRunner.Run(job, AppendLog);
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog("Error : " + ex.Message);
+                    }
+                    finally
+                    {
+                        App.Current.Dispatcher.Invoke(() =>
+                        {
+                            IsRunning = false;
+                        });
+                    }
+                });
 
             }
             catch (Exception ex)
@@ -102,7 +127,10 @@ namespace UnnotiTools.UI.ViewModels
 
         private void AppendLog(string msg)
         {
-            Logs += msg + Environment.NewLine;
+            App.Current.Dispatcher.Invoke(() =>
+            {
+                Logs += msg + Environment.NewLine;
+            });
         }
     }
 }

@@ -1,11 +1,10 @@
 {
-  "InputFolder": "E:\\Work\\Samples\\UnnotiCommandTool\\Configs\\CSV\\Inputs",
-  "ArchiveFolder": "E:\\Work\\Samples\\UnnotiCommandTool\\Configs\\CSV\\Archive",
-  "FieldMapperFilePath": "E:\\Work\\Samples\\UnnotiCommandTool\\Configs\\CSV\\config\\mapper.json",
+  "InputFolder": "E:\\Work\\Samples\\UnnotiCommandTool\\Configs\\CSV\\GoldrenRecord\\Inputs",
+  "ArchiveFolder": "E:\\Work\\Samples\\UnnotiCommandTool\\Configs\\CSV\\GoldrenRecord\\Archive",
+  "FieldMapperFilePath": "E:\\Work\\Samples\\UnnotiCommandTool\\Configs\\CSV\\GoldrenRecord\\config\\mapper.json",
 
   "ApiBaseUrl": "http://106.51.134.29:8042/gateway",
   "ApiKey": "YOUR_API_KEY_HERE",
 
-  "LogFolderPath": "E:\\Work\\Samples\\UnnotiCommandTool\\Configs\\CSV\\Logs",
-  "UniqueIdType": "RC_No"
+  "LogFolderPath": "E:\\Work\\Samples\\UnnotiCommandTool\\Configs\\CSV\\GoldrenRecord\\Logs"
 }

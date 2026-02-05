@@ -17,7 +17,7 @@ namespace Unnoti.Connector.Configs
         public string ApiKey { get; set; }
 
         public string LogFolderPath { get; set; }
-        public string UniqueIdType { get; set; }
+        //public string UniqueIdType { get; set; }
         public int BatchSize { get; set; } = 100;
     }
 
