@@ -79,6 +79,7 @@ namespace UnnotiTools.UI.ViewModels
                         new ConnectorItemViewModel(
                             ((ConnectorBase)instance).Name,
                             ((ConnectorBase)instance).ConnectorType,
+                                 ((ConnectorBase)instance).IconPath,
                             configurable.GetConfigSchema()));
                 }
             }

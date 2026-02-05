@@ -58,6 +58,7 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="Converters\RecordTypeToColorConverter.cs" />
     <Compile Include="Infrastructure\RelayCommand.cs" />
     <Compile Include="Services\JobRunner.cs" />
     <Compile Include="Services\UiLogSink.cs" />
@@ -118,6 +119,12 @@
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Assets\logo.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets\Icons\csv.png" />
+    <Resource Include="Assets\Icons\json.png" />
+    <Resource Include="Assets\Icons\sql.png" />
+    <Resource Include="Assets\Icons\xml.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

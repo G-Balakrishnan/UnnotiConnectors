@@ -11,17 +11,22 @@ namespace UnnotiTools.UI.ViewModels
     {
         public string Name { get; }
         public string ConnectorType { get; }
-        public IReadOnlyList<ConfigFieldDefinition> Schema { get; }
+        public string Icon => ConnectorType.Contains("SQL") ? "🗄️" : "📄";
+        public string IconPath { get; }   // ✅ NEW
+        public string Description =>
+            ConnectorType.Contains("Scheme") ? "Scheme Record Importer" : "Golden Record Importer";
 
-        public ConnectorItemViewModel(
-            string name,
-            string type,
-            IReadOnlyList<ConfigFieldDefinition> schema)
+        public ConnectorItemViewModel(string name, string connectorType,string connectoriconpath, IEnumerable<ConfigFieldDefinition> schema)
         {
             Name = name;
-            ConnectorType = type;
+            ConnectorType = connectorType;
             Schema = schema;
+            IconPath = connectoriconpath;
         }
+
+        public IEnumerable<ConfigFieldDefinition> Schema { get; }
+
+     
     }
 
 }

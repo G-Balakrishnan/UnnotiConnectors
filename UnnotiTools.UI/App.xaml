@@ -3,10 +3,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
               xmlns:local="clr-namespace:UnnotiTools.UI"
              xmlns:conv="clr-namespace:UnnotiTools.UI"
+             xmlns:converters="clr-namespace:UnnotiTools.UI.Converters"
  StartupUri="MainWindow.xaml">
     <Application.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <conv:InverseBoolConverter x:Key="InverseBoolConverter"/>
+        <converters:RecordTypeToColorConverter x:Key="RecordTypeToColorConverter"/>
     </Application.Resources>
 
 </Application>

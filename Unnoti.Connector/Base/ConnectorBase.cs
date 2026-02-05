@@ -20,6 +20,7 @@ namespace Unnoti.Connector.Base
         /// Stable identifier used in JobConfig.ConnectorType
         /// </summary>
         public abstract string ConnectorType { get; }
+        public abstract string IconPath { get; } // 👈 added
 
         protected UnnotiExecutionContext Context { get; private set; }
         protected ExecutionResult Result { get; private set; }

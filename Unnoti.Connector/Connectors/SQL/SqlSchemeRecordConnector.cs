@@ -18,12 +18,13 @@ using Unnoti.Core.Services;
 
 namespace Unnoti.Connector.Connectors.SQL
 {
-    public class SqlGoldenRecordConnector : ConnectorBase, IConnector, IConfigurableConnector
+    public class SqlSchemeRecordConnector : ConnectorBase, IConnector, IConfigurableConnector
     {
-        public override string Name => "SQL → Golden Record Importer";
-        public string ConnectorKey => "SQL_GOLDEN_RECORD";
-        public override string ConnectorType => "SqlGoldenRecordConnector";
+        public override string Name => "SQL → Scheme Record Importer";
+        public string ConnectorKey => "SQL_SCHEME_RECORD";
+        public override string ConnectorType => "SqlSchemeRecordConnector";
         public override string IconPath => "pack://application:,,,/Assets/Icons/sql.png";
+
         private LogService _logger;
 
         public Task<ExecutionResult> ExecuteAsync(
@@ -42,9 +43,9 @@ namespace Unnoti.Connector.Connectors.SQL
         {
             InitializeResult();
 
-            var cfg = JsonConvert.DeserializeObject<SqlGoldenRecordConnectionConfig>(
+            var cfg = JsonConvert.DeserializeObject<SqlSchemeRecordConnectionConfig>(
                 File.ReadAllText(connectorConfigPath))
-                ?? throw new InvalidOperationException("Invalid SQL connector config");
+                ?? throw new InvalidOperationException("Invalid SQL Scheme connector config");
 
             var mapper = JsonConvert.DeserializeObject<CsvFieldMapperConfig>(
                 File.ReadAllText(cfg.FieldMapperFilePath))
@@ -52,10 +53,13 @@ namespace Unnoti.Connector.Connectors.SQL
 
             Directory.CreateDirectory(cfg.LogFolderPath);
 
-            var importService = new GoldenRecordImportService(cfg.ApiBaseUrl, cfg.ApiKey);
+            var importService = new SchemeRecordImportService(
+                cfg.ApiBaseUrl,
+                cfg.ApiKey,
+                _logger);
 
             var logFilename =
-                "SQL_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff") + "_ImportLog.csv";
+                "SQL_SCHEME_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff") + "_ImportLog.csv";
 
             using (var con = new SqlConnection(cfg.ConnectionString))
             {
@@ -64,7 +68,7 @@ namespace Unnoti.Connector.Connectors.SQL
                 using (var cmd = new SqlCommand(cfg.Query, con))
                 using (var reader = cmd.ExecuteReader())
                 {
-                    var batch = new List<GoldenRecordPayload>();
+                    var batch = new List<SchemeRecordPayload>();
                     int rowNumber = 0;
 
                     while (reader.Read())
@@ -120,11 +124,11 @@ namespace Unnoti.Connector.Connectors.SQL
             return Complete();
         }
 
-        // ================= BATCH SEND (SYNC) =================
+        // ===================== SEND BATCH =====================
 
         private void SendBatch(
-            GoldenRecordImportService service,
-            List<GoldenRecordPayload> batch,
+            SchemeRecordImportService service,
+            List<SchemeRecordPayload> batch,
             string logsFolder,
             string logFileName,
             int startingRowNumber,
@@ -155,16 +159,17 @@ namespace Unnoti.Connector.Connectors.SQL
             }
         }
 
-        // ================= PAYLOAD BUILDER =================
+        // ===================== PAYLOAD BUILDER =====================
 
-        private GoldenRecordPayload BuildPayloadFromReader(
+        private SchemeRecordPayload BuildPayloadFromReader(
             SqlDataReader reader,
             CsvFieldMapperConfig mapper,
-            SqlGoldenRecordConnectionConfig cfg,
+            SqlSchemeRecordConnectionConfig cfg,
             int rowNumber)
         {
-            var payload = new GoldenRecordPayload
+            var payload = new SchemeRecordPayload
             {
+                WorkflowKey = cfg.WorkflowKey, // ⭐ ADDON PARAM
                 FieldValues = new List<FieldValue>(),
                 UniqueData = new List<UniqueData>()
             };
@@ -185,7 +190,7 @@ namespace Unnoti.Connector.Connectors.SQL
                         payload.UniqueData.Add(new UniqueData
                         {
                             GoldenRecordUniqueId = raw,
-                            UniqueIdType = map.Grs_Field_Key
+                            UniqueIdType = cfg.UniqueIdType
                         });
                         continue;
                     }
@@ -240,10 +245,10 @@ namespace Unnoti.Connector.Connectors.SQL
 
         protected override void LogError(string message)
         {
-            File.AppendAllText("sql-errors.log", message + Environment.NewLine);
+            File.AppendAllText("sql-scheme-errors.log", message + Environment.NewLine);
         }
 
-        // ================= CONFIG =================
+        // ===================== CONFIG =====================
 
         public IReadOnlyList<ConfigFieldDefinition> GetConfigSchema() =>
             new[]
@@ -251,11 +256,12 @@ namespace Unnoti.Connector.Connectors.SQL
                 new ConfigFieldDefinition
                 {
                     Key = "ConnectionConfig",
-                    Label = "SQL → Golden Record Import Connector Config Path",
+                    Label = "SQL → Scheme Record Import Connector Config Path",
                     FieldType = ConfigFieldType.ConnectionConfigJson,
                     IsRequired = true,
-                    ModelType = typeof(SqlGoldenRecordConnectionConfig),
-                    DefaultValue = "E:\\Work\\Samples\\UnnotiCommandTool\\Configs\\SQL\\config\\config.json"
+                    ModelType = typeof(SqlSchemeRecordConnectionConfig),
+                    DefaultValue =
+                        "E:\\Work\\Samples\\UnnotiCommandTool\\Configs\\SQL\\Scheme\\config.json"
                 }
             };
 

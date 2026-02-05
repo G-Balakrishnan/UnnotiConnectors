@@ -47,10 +47,20 @@
     <Compile Include="Base\ConnectorBase.cs" />
     <Compile Include="Configs\CsvSchemeRecordConnectionConfig.cs" />
     <Compile Include="Configs\CsvGoldenRecordConnectionConfig.cs" />
+    <Compile Include="Configs\JsonGoldenRecordConnectionConfig.cs" />
+    <Compile Include="Configs\JsonSchemeRecordConnectionConfig.cs" />
     <Compile Include="Configs\SqlGoldenRecordConnectionConfig.cs" />
+    <Compile Include="Configs\SqlSchemeRecordConnectionConfig.cs" />
+    <Compile Include="Configs\XmlGoldenRecordConnectionConfig.cs" />
+    <Compile Include="Configs\XmlSchemeRecordConnectionConfig.cs" />
     <Compile Include="Connectors\CSV\CsvSchemeRecordConnector.cs" />
     <Compile Include="Connectors\CSV\CsvGoldenRecordConnector.cs" />
+    <Compile Include="Connectors\Json\JsonGoldenRecordConnector.cs" />
+    <Compile Include="Connectors\Json\JsonSchemeRecordConnector.cs" />
     <Compile Include="Connectors\SQL\SqlGoldenRecordConnector.cs" />
+    <Compile Include="Connectors\SQL\SqlSchemeRecordConnector.cs" />
+    <Compile Include="Connectors\XML\XmlGoldenRecordConnector.cs" />
+    <Compile Include="Connectors\XML\XmlSchemeRecordConnector.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

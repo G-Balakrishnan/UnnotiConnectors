@@ -21,6 +21,7 @@ namespace Unnoti.Connector.Connectors.CSV
     {
         public override string Name => "CSV → Golden Record Importer";
         public string ConnectorKey => "CSV_GOLDEN_RECORD";
+        public override string IconPath => "pack://application:,,,/Assets/Icons/csv.png";
 
         public override string ConnectorType => "CsvGoldenRecordConnector";
         LogService logger;

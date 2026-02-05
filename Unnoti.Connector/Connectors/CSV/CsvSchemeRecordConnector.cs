@@ -22,6 +22,7 @@ namespace Unnoti.Connector.Connectors.CSV
         public override string Name => "CSV → Scheme Record Importer";
         public string ConnectorKey => "CSV_SCHEME_RECORD";
         public override string ConnectorType => "CsvSchemeRecordConnector";
+        public override string IconPath => "pack://application:,,,/Assets/Icons/csv.png";
 
         private LogService _logger;
 

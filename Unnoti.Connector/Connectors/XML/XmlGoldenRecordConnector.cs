@@ -1,11 +1,12 @@
 ﻿using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
+using System.Xml.XPath;
 using Unnoti.Connector.Base;
 using Unnoti.Connector.Configs;
 using Unnoti.Core;
@@ -16,14 +17,15 @@ using Unnoti.Core.IContracts;
 using Unnoti.Core.Logging;
 using Unnoti.Core.Services;
 
-namespace Unnoti.Connector.Connectors.SQL
+namespace Unnoti.Connector.Connectors.XML
 {
-    public class SqlGoldenRecordConnector : ConnectorBase, IConnector, IConfigurableConnector
+    public class XmlGoldenRecordConnector : ConnectorBase, IConnector, IConfigurableConnector
     {
-        public override string Name => "SQL → Golden Record Importer";
-        public string ConnectorKey => "SQL_GOLDEN_RECORD";
-        public override string ConnectorType => "SqlGoldenRecordConnector";
-        public override string IconPath => "pack://application:,,,/Assets/Icons/sql.png";
+        public override string Name => "XML → Golden Record Importer";
+        public string ConnectorKey => "XML_GOLDEN_RECORD";
+        public override string ConnectorType => "XmlGoldenRecordConnector";
+        public override string IconPath => "pack://application:,,,/Assets/Icons/xml.png";
+
         private LogService _logger;
 
         public Task<ExecutionResult> ExecuteAsync(
@@ -42,9 +44,9 @@ namespace Unnoti.Connector.Connectors.SQL
         {
             InitializeResult();
 
-            var cfg = JsonConvert.DeserializeObject<SqlGoldenRecordConnectionConfig>(
+            var cfg = JsonConvert.DeserializeObject<XmlGoldenRecordConnectionConfig>(
                 File.ReadAllText(connectorConfigPath))
-                ?? throw new InvalidOperationException("Invalid SQL connector config");
+                ?? throw new InvalidOperationException("Invalid XML Golden config");
 
             var mapper = JsonConvert.DeserializeObject<CsvFieldMapperConfig>(
                 File.ReadAllText(cfg.FieldMapperFilePath))
@@ -52,57 +54,33 @@ namespace Unnoti.Connector.Connectors.SQL
 
             Directory.CreateDirectory(cfg.LogFolderPath);
 
+            var doc = XDocument.Load(cfg.InputFilePath);
+            var records = doc.XPathSelectElements(cfg.RecordXPath).ToList();
+
             var importService = new GoldenRecordImportService(cfg.ApiBaseUrl, cfg.ApiKey);
 
             var logFilename =
-                "SQL_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff") + "_ImportLog.csv";
+                "XML_GOLDEN_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff") + "_ImportLog.csv";
 
-            using (var con = new SqlConnection(cfg.ConnectionString))
+            var batch = new List<GoldenRecordPayload>();
+            int rowNumber = 0;
+
+            foreach (var record in records)
             {
-                con.Open();
+                token.ThrowIfCancellationRequested();
+                rowNumber++;
 
-                using (var cmd = new SqlCommand(cfg.Query, con))
-                using (var reader = cmd.ExecuteReader())
+                try
                 {
-                    var batch = new List<GoldenRecordPayload>();
-                    int rowNumber = 0;
+                    var payload = BuildPayloadFromXml(
+                        record,
+                        mapper,
+                        cfg,
+                        rowNumber);
 
-                    while (reader.Read())
-                    {
-                        token.ThrowIfCancellationRequested();
-                        rowNumber++;
+                    batch.Add(payload);
 
-                        try
-                        {
-                            var payload = BuildPayloadFromReader(
-                                reader,
-                                mapper,
-                                cfg,
-                                rowNumber);
-
-                            batch.Add(payload);
-
-                            if (batch.Count >= cfg.BatchSize)
-                            {
-                                SendBatch(
-                                    importService,
-                                    batch,
-                                    cfg.LogFolderPath,
-                                    logFilename,
-                                    rowNumber - batch.Count + 1,
-                                    token);
-
-                                batch.Clear();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.Error($"Row {rowNumber}: {ex.Message}");
-                            LogError($"Row {rowNumber}: {ex.Message}");
-                        }
-                    }
-
-                    if (batch.Any())
+                    if (batch.Count >= cfg.BatchSize)
                     {
                         SendBatch(
                             importService,
@@ -115,52 +93,68 @@ namespace Unnoti.Connector.Connectors.SQL
                         batch.Clear();
                     }
                 }
+                catch (Exception ex)
+                {
+                    _logger.Error($"Row {rowNumber}: {ex.Message}");
+                    LogError($"Row {rowNumber}: {ex.Message}");
+                }
+            }
+
+            if (batch.Any())
+            {
+                SendBatch(
+                    importService,
+                    batch,
+                    cfg.LogFolderPath,
+                    logFilename,
+                    rowNumber - batch.Count + 1,
+                    token);
             }
 
             return Complete();
         }
 
-        // ================= BATCH SEND (SYNC) =================
+        // ================= SEND BATCH =================
 
         private void SendBatch(
             GoldenRecordImportService service,
             List<GoldenRecordPayload> batch,
             string logsFolder,
             string logFileName,
-            int startingRowNumber,
+            int startingRow,
             CancellationToken token)
         {
             var csvLogger = new ImportCsvLogger(logsFolder, logFileName);
-            int rowNumber = startingRowNumber;
+            int row = startingRow;
 
             foreach (var payload in batch)
             {
                 token.ThrowIfCancellationRequested();
 
-                var uniqueValue = payload.UniqueData?
+                var uniqueValue = payload.UniqueData
                     .FirstOrDefault()?.GoldenRecordUniqueId ?? "UNKNOWN";
 
                 var result = service.Send(payload);
 
-                _logger.Info($"Row {rowNumber} → {result.HttpStatus}");
+                _logger.Info($"Row {row} → {result.HttpStatus}");
 
                 csvLogger.WriteRow(
-                    rowNumber,
+                    row,
                     uniqueValue,
                     result.IsSuccess ? "SUCCESS" : "FAILURE",
                     result.HttpStatus,
                     result.ResponseText);
 
-                rowNumber++;
+                row++;
             }
         }
 
         // ================= PAYLOAD BUILDER =================
 
-        private GoldenRecordPayload BuildPayloadFromReader(
-            SqlDataReader reader,
+        private GoldenRecordPayload BuildPayloadFromXml(
+            XElement element,
             CsvFieldMapperConfig mapper,
-            SqlGoldenRecordConnectionConfig cfg,
+            XmlGoldenRecordConnectionConfig cfg,
             int rowNumber)
         {
             var payload = new GoldenRecordPayload
@@ -171,10 +165,11 @@ namespace Unnoti.Connector.Connectors.SQL
 
             foreach (var map in mapper.Field_Mappings)
             {
-                if (!ColumnExists(reader, map.Csv_Header))
+                var valueElement = element.XPathSelectElement(map.Csv_Header);
+                if (valueElement == null)
                     continue;
 
-                var raw = reader[map.Csv_Header]?.ToString()?.Trim();
+                var raw = valueElement.Value?.Trim();
                 if (string.IsNullOrWhiteSpace(raw))
                     continue;
 
@@ -185,7 +180,7 @@ namespace Unnoti.Connector.Connectors.SQL
                         payload.UniqueData.Add(new UniqueData
                         {
                             GoldenRecordUniqueId = raw,
-                            UniqueIdType = map.Grs_Field_Key
+                            UniqueIdType = cfg.UniqueIdType
                         });
                         continue;
                     }
@@ -218,7 +213,7 @@ namespace Unnoti.Connector.Connectors.SQL
                 catch (Exception ex)
                 {
                     throw new Exception(
-                        $"Row {rowNumber}, Column '{map.Csv_Header}', Value '{raw}' invalid: {ex.Message}");
+                        $"Row {rowNumber}, XPath '{map.Csv_Header}', Value '{raw}' invalid: {ex.Message}");
                 }
             }
 
@@ -228,22 +223,10 @@ namespace Unnoti.Connector.Connectors.SQL
             return payload;
         }
 
-        private bool ColumnExists(SqlDataReader reader, string columnName)
-        {
-            for (int i = 0; i < reader.FieldCount; i++)
-            {
-                if (reader.GetName(i).Equals(columnName, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-            return false;
-        }
-
         protected override void LogError(string message)
         {
-            File.AppendAllText("sql-errors.log", message + Environment.NewLine);
+            File.AppendAllText("xml-golden-errors.log", message + Environment.NewLine);
         }
-
-        // ================= CONFIG =================
 
         public IReadOnlyList<ConfigFieldDefinition> GetConfigSchema() =>
             new[]
@@ -251,11 +234,10 @@ namespace Unnoti.Connector.Connectors.SQL
                 new ConfigFieldDefinition
                 {
                     Key = "ConnectionConfig",
-                    Label = "SQL → Golden Record Import Connector Config Path",
+                    Label = "XML → Golden Record Import Connector Configuration Path",
                     FieldType = ConfigFieldType.ConnectionConfigJson,
                     IsRequired = true,
-                    ModelType = typeof(SqlGoldenRecordConnectionConfig),
-                    DefaultValue = "E:\\Work\\Samples\\UnnotiCommandTool\\Configs\\SQL\\config\\config.json"
+                    ModelType = typeof(XmlGoldenRecordConnectionConfig)
                 }
             };
 

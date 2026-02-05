@@ -6,9 +6,9 @@
         Width="1200"
         Background="#0B1E33"
         Foreground="White"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        >
 
-    
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="60"/>
@@ -17,30 +17,33 @@
         </Grid.RowDefinitions>
 
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="260"/>
+            <ColumnDefinition Width="370"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
         <!-- ================= HEADER ================= -->
         <Border Grid.Row="0"
                 Grid.ColumnSpan="2"
-                Background="#0F2A44"
                 Padding="16">
-            <DockPanel>
-                <!-- Logo -->
-                <Image Width="36"
-       Height="36"
-       Margin="0,0,12,0"
-       Source="pack://application:,,,/Assets/logo.png"
-       DockPanel.Dock="Left"/>
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                    <GradientStop Color="#102A43" Offset="0"/>
+                    <GradientStop Color="#0F2A44" Offset="1"/>
+                </LinearGradientBrush>
+            </Border.Background>
 
-                <!-- App Name -->
+            <DockPanel>
+                <Image Width="36"
+                       Height="36"
+                       Margin="0,0,12,0"
+                       Source="pack://application:,,,/Assets/logo.png"
+                       DockPanel.Dock="Left"/>
+
                 <TextBlock Text="Unnoti Migrator"
                            FontSize="20"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center"/>
 
-                <!-- Help -->
                 <TextBlock Text="ⓘ Help"
                            Foreground="#C7D4E5"
                            Cursor="Hand"
@@ -52,72 +55,107 @@
         <!-- ================= LEFT CONNECTOR LIST ================= -->
         <Border Grid.Row="1"
                 Grid.Column="0"
-                Background="#0F2A44"
-                Padding="8">
+                Background="#102A43"
+                BorderBrush="#1E3A5F"
+                BorderThickness="0,0,1,0"
+                Padding="10">
 
-            <StackPanel>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
                 <TextBlock Text="CONNECTORS"
                            FontSize="12"
                            Foreground="#C7D4E5"
                            Margin="8,4"/>
-
-                <ListBox ItemsSource="{Binding Connectors}"
-                         SelectedItem="{Binding SelectedConnector}"
-                         DisplayMemberPath="Name"
-                         Background="Transparent"
-                         BorderThickness="0"
-                         Foreground="White">
+                <ListBox Grid.Row="1"
+         ItemsSource="{Binding Connectors}"
+         SelectedItem="{Binding SelectedConnector}"
+         Background="Transparent"
+         BorderThickness="0"
+         ScrollViewer.VerticalScrollBarVisibility="Auto">
 
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
-                            <Setter Property="Padding" Value="10"/>
-                            <Setter Property="Margin" Value="4"/>
-                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="6"/>
                             <Setter Property="Cursor" Value="Hand"/>
 
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListBoxItem">
-                                        <Border Background="{TemplateBinding Background}"
-                                                CornerRadius="6">
-                                            <ContentPresenter/>
+                                        <Border x:Name="Card"
+                                Background="#15395B"
+                                CornerRadius="8"
+                                Padding="12">
+
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="5"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <Border x:Name="Indicator"
+                                        Grid.Column="0"
+                                        Background="Transparent"
+                                        CornerRadius="4"/>
+
+                                                <StackPanel Grid.Column="1">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Image Source="{Binding IconPath}" Width="32" Height="28" Margin="0,0,6,0"/>
+
+                                                        <TextBlock Text="{Binding Name}"
+                                                   FontSize="14"
+                                                   Foreground="#9FB3C8"
+                                                   FontWeight="SemiBold"/>
+                                                    </StackPanel>
+
+                                                    <TextBlock Text="{Binding Description}"
+                                               FontSize="11"
+                                               Foreground="{Binding Description, Converter={StaticResource RecordTypeToColorConverter}}"
+                                               Margin="22,2,0,0"/>
+                                                </StackPanel>
+                                            </Grid>
                                         </Border>
+
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Card" Property="Background" Value="#1B4B7A"/>
+                                            </Trigger>
+
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Card" Property="Background" Value="#1B3F66"/>
+                                                <Setter TargetName="Indicator" Property="Background" Value="#1F6FEB"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </Setter.Value>
                             </Setter>
-
-                            <Style.Triggers>
-                                <Trigger Property="IsSelected" Value="True">
-                                    <Setter Property="Background" Value="#1F6FEB"/>
-                                </Trigger>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="#163A5F"/>
-                                </Trigger>
-                            </Style.Triggers>
                         </Style>
                     </ListBox.ItemContainerStyle>
-
                 </ListBox>
-            </StackPanel>
+
+            </Grid>
         </Border>
 
         <!-- ================= CONFIG EDITOR ================= -->
         <Border Grid.Row="1"
                 Grid.Column="1"
-                Background="#122C4A"
-                Padding="20"
-                Margin="10">
+                Background="#102A43"
+                Padding="24"
+                Margin="16"
+                CornerRadius="12"
+                BorderBrush="#1E3A5F"
+                BorderThickness="1">
 
             <DockPanel>
-
-                <!-- Title -->
                 <TextBlock Text="{Binding SelectedConnector.Name}"
                            FontSize="18"
                            FontWeight="SemiBold"
                            DockPanel.Dock="Top"
                            Margin="0,0,0,16"/>
 
-                <!-- Config Fields -->
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <ItemsControl ItemsSource="{Binding ConfigItems}">
                         <ItemsControl.ItemTemplate>
@@ -131,6 +169,7 @@
                                              Background="#0B1E33"
                                              Foreground="White"
                                              BorderBrush="#1F6FEB"
+                                             BorderThickness="1"
                                              Padding="8"/>
                                 </StackPanel>
                             </DataTemplate>
@@ -138,36 +177,38 @@
                     </ItemsControl>
                 </ScrollViewer>
 
-                <!-- ACTION BUTTONS -->
                 <StackPanel Orientation="Horizontal"
                             HorizontalAlignment="Right"
                             DockPanel.Dock="Bottom"
-                            Margin="0,16,0,0">
+                            Margin="0,20,0,0">
 
                     <Button Content="Cancel"
                             Width="100"
                             Height="36"
                             Margin="0,0,10,0"
-                            Background="#2A3F5F"
+                            Background="#15395B"
+                            BorderBrush="#1E3A5F"
                             Foreground="White"/>
 
                     <Button Content="Run Migration"
-        Width="140"
-        Height="36"
-        Background="#1F6FEB"
-        Foreground="White"
-        Command="{Binding RunCommand}"
-        IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBoolConverter}}"/>
+                            Width="140"
+                            Height="36"
+                            Background="#1F6FEB"
+                            BorderBrush="#4DA3FF"
+                            Foreground="White"
+                            Command="{Binding RunCommand}"
+                            IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBoolConverter}}"/>
                 </StackPanel>
-
             </DockPanel>
         </Border>
 
         <!-- ================= LOG PANEL ================= -->
         <Border Grid.Row="2"
                 Grid.ColumnSpan="2"
-                Background="#0F2A44"
-                Padding="10">
+                Background="#0F243A"
+                BorderBrush="#1E3A5F"
+                BorderThickness="1,0,0,0"
+                Padding="12">
 
             <DockPanel>
                 <TextBlock Text="RUN LOGS"
@@ -178,36 +219,34 @@
                 <TextBox Text="{Binding Logs}"
                          IsReadOnly="True"
                          Background="#0B1E33"
-                         Foreground="White"
+                         Foreground="#C7D4E5"
                          BorderThickness="0"
                          VerticalScrollBarVisibility="Auto"
-                         Padding="8"/>
+                         Padding="10"/>
             </DockPanel>
         </Border>
 
+        <!-- ================= LOADING OVERLAY ================= -->
         <Grid Grid.RowSpan="3"
-      Grid.ColumnSpan="2"
-      Background="#80000000"
-      Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibilityConverter}}">
+              Grid.ColumnSpan="2"
+              Background="#80000000"
+              Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibilityConverter}}">
 
             <StackPanel HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Background="#0F2A44"
-            >
+                        VerticalAlignment="Center"
+                        Background="#102A43"
+                       >
 
                 <TextBlock Text="Running Migration..."
-                   Foreground="White"
-                   FontSize="16"
-                   Margin="0,0,0,12"
-                   HorizontalAlignment="Center"/>
+                           Foreground="White"
+                           FontSize="16"
+                           Margin="0,0,0,12"
+                           HorizontalAlignment="Center"/>
 
                 <ProgressBar Width="220"
-                     Height="8"
-                     IsIndeterminate="True"/>
+                             Height="8"
+                             IsIndeterminate="True"/>
             </StackPanel>
         </Grid>
-
     </Grid>
-            
-            
 </Window>
