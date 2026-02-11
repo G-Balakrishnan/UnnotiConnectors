@@ -126,5 +126,10 @@
     <Resource Include="Assets\Icons\sql.png" />
     <Resource Include="Assets\Icons\xml.png" />
   </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets\Icons\excel.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Resource>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
